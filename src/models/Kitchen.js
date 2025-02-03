@@ -1,7 +1,13 @@
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-  class Kitchen extends Model {}
+  class Kitchen extends Model {
+    static associate(models) {
+      Kitchen.belongsTo(models.User, { foreignKey: 'usuario_id', as: 'usuario' });
+      Kitchen.hasMany(models.Dish, { foreignKey: 'fornecedor_id', as: 'pratos' });
+      Kitchen.hasMany(models.Order, { foreignKey: 'fornecedor_id', as: 'pedidos' });
+    }
+  }
 
   Kitchen.init({
     id: {
@@ -9,41 +15,45 @@ module.exports = (sequelize) => {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
-    userId: {
+    usuario_id: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: 'Users',
+        model: 'usuarios',
         key: 'id'
       }
     },
-    name: {
+    nome: {
       type: DataTypes.STRING,
       allowNull: false
     },
-    location: {
+    localizacao: {
       type: DataTypes.STRING,
       allowNull: false
     },
-    specialty: {
+    especialidade: {
       type: DataTypes.STRING,
       allowNull: false
     },
-    isAvailable: {
+    disponivel: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
     },
-    createdAt: {
+    criado_em: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     },
-    updatedAt: {
+    atualizado_em: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     }
   }, {
     sequelize,
-    modelName: 'Kitchen'
+    modelName: 'Kitchen',
+    tableName: 'fornecedores',
+    timestamps: true,
+    createdAt: 'criado_em',
+    updatedAt: 'atualizado_em'
   });
 
   return Kitchen;

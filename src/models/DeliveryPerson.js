@@ -1,50 +1,51 @@
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-  class Dish extends Model {}
+  class DeliveryPerson extends Model {
+    static associate(models) {
+      DeliveryPerson.belongsTo(models.User, { foreignKey: 'usuario_id', as: 'usuario' });
+      DeliveryPerson.hasMany(models.Order, { foreignKey: 'entregador_id', as: 'entregas' });
+    }
+  }
 
-  Dish.init({
+  DeliveryPerson.init({
     id: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
-    kitchenId: {
+    usuario_id: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: 'Kitchens',
+        model: 'usuarios',
         key: 'id'
       }
     },
-    name: {
+    veiculo: {
       type: DataTypes.STRING,
       allowNull: false
     },
-    description: {
-      type: DataTypes.TEXT,
-      allowNull: false
-    },
-    price: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: false
-    },
-    isAvailable: {
+    disponivel: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
     },
-    createdAt: {
+    criado_em: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     },
-    updatedAt: {
+    atualizado_em: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     }
   }, {
     sequelize,
-    modelName: 'Dish'
+    modelName: 'DeliveryPerson',
+    tableName: 'entregadores',
+    timestamps: true,
+    createdAt: 'criado_em',
+    updatedAt: 'atualizado_em'
   });
 
-  return Dish;
+  return DeliveryPerson;
 };

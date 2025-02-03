@@ -5,46 +5,46 @@ const authController = require('../controllers/auth.controller');
 
 // Validações comuns
 const commonValidations = [
-  body('name').notEmpty().withMessage('Nome é obrigatório'),
+  body('nome').notEmpty().withMessage('Nome é obrigatório'),
   body('email').isEmail().withMessage('Email inválido'),
-  body('password').isLength({ min: 6 }).withMessage('Senha deve ter no mínimo 6 caracteres')
+  body('senha').isLength({ min: 6 }).withMessage('Senha deve ter no mínimo 6 caracteres')
 ];
 
 // Validações específicas por tipo de usuário
-const customerValidations = [
-  body('address').notEmpty().withMessage('Endereço é obrigatório'),
-  body('phone').notEmpty().withMessage('Telefone é obrigatório')
+const clienteValidations = [
+  body('endereco').notEmpty().withMessage('Endereço é obrigatório'),
+  body('telefone').notEmpty().withMessage('Telefone é obrigatório')
 ];
 
-const kitchenValidations = [
-  body('kitchenName').notEmpty().withMessage('Nome da cozinha é obrigatório'),
-  body('location').notEmpty().withMessage('Localização é obrigatória'),
-  body('specialty').notEmpty().withMessage('Especialidade é obrigatória')
+const fornecedorValidations = [
+  body('nome_estabelecimento').notEmpty().withMessage('Nome do estabelecimento é obrigatório'),
+  body('localizacao').notEmpty().withMessage('Localização é obrigatória'),
+  body('especialidade').notEmpty().withMessage('Especialidade é obrigatória')
 ];
 
-const deliveryValidations = [
-  body('vehicle').notEmpty().withMessage('Veículo é obrigatório')
+const entregadorValidations = [
+  body('veiculo').notEmpty().withMessage('Veículo é obrigatório')
 ];
 
 // Rota de registro
 router.post('/register', [
   ...commonValidations,
-  body('type').isIn(['kitchen', 'customer', 'delivery', 'admin', 'customer_service'])
+  body('tipo').isIn(['cliente', 'fornecedor', 'entregador', 'admin', 'atendimento'])
     .withMessage('Tipo de usuário inválido'),
   (req, res, next) => {
     // Aplicar validações específicas baseado no tipo de usuário
-    const type = req.body.type;
+    const tipo = req.body.tipo;
     let specificValidations = [];
     
-    switch (type) {
-      case 'customer':
-        specificValidations = customerValidations;
+    switch (tipo) {
+      case 'cliente':
+        specificValidations = clienteValidations;
         break;
-      case 'kitchen':
-        specificValidations = kitchenValidations;
+      case 'fornecedor':
+        specificValidations = fornecedorValidations;
         break;
-      case 'delivery':
-        specificValidations = deliveryValidations;
+      case 'entregador':
+        specificValidations = entregadorValidations;
         break;
     }
     
@@ -57,7 +57,7 @@ router.post('/register', [
 // Rota de login
 router.post('/login', [
   body('email').isEmail().withMessage('Email inválido'),
-  body('password').notEmpty().withMessage('Senha é obrigatória')
+  body('senha').notEmpty().withMessage('Senha é obrigatória')
 ], authController.login);
 
 module.exports = router;

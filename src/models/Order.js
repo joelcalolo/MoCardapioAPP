@@ -1,7 +1,14 @@
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-  class Order extends Model {}
+  class Order extends Model {
+    static associate(models) {
+      Order.belongsTo(models.Customer, { foreignKey: 'cliente_id', as: 'cliente' });
+      Order.belongsTo(models.Kitchen, { foreignKey: 'fornecedor_id', as: 'fornecedor' });
+      Order.belongsTo(models.DeliveryPerson, { foreignKey: 'entregador_id', as: 'entregador' });
+      Order.hasMany(models.OrderItem, { foreignKey: 'pedido_id', as: 'itens' });
+    }
+  }
 
   Order.init({
     id: {
@@ -9,48 +16,52 @@ module.exports = (sequelize) => {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
-    customerId: {
+    cliente_id: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: 'Customers',
+        model: 'clientes',
         key: 'id'
       }
     },
-    kitchenId: {
+    fornecedor_id: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: 'Kitchens',
+        model: 'fornecedores',
         key: 'id'
       }
     },
-    deliveryPersonId: {
+    entregador_id: {
       type: DataTypes.UUID,
       references: {
-        model: 'DeliveryPersons',
+        model: 'entregadores',
         key: 'id'
       }
     },
     status: {
-      type: DataTypes.ENUM('pending', 'accepted', 'preparing', 'ready', 'delivering', 'delivered', 'cancelled'),
-      defaultValue: 'pending'
+      type: DataTypes.ENUM('pendente', 'aceito', 'preparando', 'pronto', 'entregando', 'entregue', 'cancelado'),
+      defaultValue: 'pendente'
     },
     total: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false
     },
-    createdAt: {
+    criado_em: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     },
-    updatedAt: {
+    atualizado_em: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     }
   }, {
     sequelize,
-    modelName: 'Order'
+    modelName: 'Order',
+    tableName: 'pedidos',
+    timestamps: true,
+    createdAt: 'criado_em',
+    updatedAt: 'atualizado_em'
   });
 
   return Order;

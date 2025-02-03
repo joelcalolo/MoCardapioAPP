@@ -1,7 +1,15 @@
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-  class User extends Model {}
+  class User extends Model {
+    static associate(models) {
+      User.hasOne(models.Customer, { foreignKey: 'usuario_id', as: 'cliente' });
+      User.hasOne(models.Kitchen, { foreignKey: 'usuario_id', as: 'fornecedor' });
+      User.hasOne(models.DeliveryPerson, { foreignKey: 'usuario_id', as: 'entregador' });
+      User.hasMany(models.Message, { foreignKey: 'remetente_id', as: 'mensagensEnviadas' });
+      User.hasMany(models.Message, { foreignKey: 'destinatario_id', as: 'mensagensRecebidas' });
+    }
+  }
 
   User.init({
     id: {
@@ -9,7 +17,7 @@ module.exports = (sequelize) => {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
-    name: {
+    nome: {
       type: DataTypes.STRING,
       allowNull: false
     },
@@ -21,34 +29,38 @@ module.exports = (sequelize) => {
         isEmail: true
       }
     },
-    password: {
+    senha: {
       type: DataTypes.STRING,
       allowNull: false
     },
-    type: {
-      type: DataTypes.ENUM('kitchen', 'customer', 'delivery', 'admin', 'customer_service'),
+    tipo: {
+      type: DataTypes.ENUM('cliente', 'fornecedor', 'entregador', 'admin', 'atendimento'),
       allowNull: false
     },
-    createdAt: {
+    criado_em: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     },
-    updatedAt: {
+    atualizado_em: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     }
   }, {
     sequelize,
     modelName: 'User',
+    tableName: 'usuarios',
+    timestamps: true,
+    createdAt: 'criado_em',
+    updatedAt: 'atualizado_em',
     hooks: {
       beforeCreate: async (user) => {
         const crypto = require('crypto');
-        user.password = crypto.createHash('sha256').update(user.password).digest('hex');
+        user.senha = crypto.createHash('sha256').update(user.senha).digest('hex');
       },
       beforeUpdate: async (user) => {
-        if (user.changed('password')) {
+        if (user.changed('senha')) {
           const crypto = require('crypto');
-          user.password = crypto.createHash('sha256').update(user.password).digest('hex');
+          user.senha = crypto.createHash('sha256').update(user.senha).digest('hex');
         }
       }
     }
@@ -57,7 +69,7 @@ module.exports = (sequelize) => {
   User.prototype.comparePassword = function(password) {
     const crypto = require('crypto');
     const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
-    return hashedPassword === this.password;
+    return hashedPassword === this.senha;
   };
 
   return User;

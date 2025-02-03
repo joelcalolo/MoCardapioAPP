@@ -1,7 +1,12 @@
 const { Model, DataTypes } = require('sequelize');
 
 module.exports = (sequelize) => {
-  class Message extends Model {}
+  class Message extends Model {
+    static associate(models) {
+      Message.belongsTo(models.User, { foreignKey: 'remetente_id', as: 'remetente' });
+      Message.belongsTo(models.User, { foreignKey: 'destinatario_id', as: 'destinatario' });
+    }
+  }
 
   Message.init({
     id: {
@@ -9,37 +14,41 @@ module.exports = (sequelize) => {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
-    senderId: {
+    remetente_id: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: 'Users',
+        model: 'usuarios',
         key: 'id'
       }
     },
-    receiverId: {
+    destinatario_id: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: 'Users',
+        model: 'usuarios',
         key: 'id'
       }
     },
-    content: {
+    conteudo: {
       type: DataTypes.TEXT,
       allowNull: false
     },
-    createdAt: {
+    criado_em: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     },
-    updatedAt: {
+    atualizado_em: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
     }
   }, {
     sequelize,
-    modelName: 'Message'
+    modelName: 'Message',
+    tableName: 'mensagens',
+    timestamps: true,
+    createdAt: 'criado_em',
+    updatedAt: 'atualizado_em'
   });
 
   return Message;

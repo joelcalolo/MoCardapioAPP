@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { User, Customer, Kitchen, DeliveryPerson } = require('../models');
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
@@ -9,7 +10,7 @@ exports.register = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, email, password, type, ...profileData } = req.body;
+    const { nome, email, senha, tipo, ...profileData } = req.body;
 
     // Verificar se o email já existe
     const existingUser = await User.findOne({ where: { email } });
@@ -19,41 +20,50 @@ exports.register = async (req, res) => {
 
     // Criar usuário
     const user = await User.create({
-      name,
+      nome,
       email,
-      password, // A senha será hasheada automaticamente pelo hook no modelo
-      type
+      senha,
+      tipo
     });
 
     // Criar perfil específico baseado no tipo de usuário
     let profile;
-    switch (type) {
-      case 'customer':
+    switch (tipo) {
+      case 'cliente':
         profile = await Customer.create({
-          userId: user.id,
-          address: profileData.address,
-          phone: profileData.phone
+          usuario_id: user.id,
+          endereco: profileData.endereco,
+          telefone: profileData.telefone
         });
         break;
-      case 'kitchen':
+      case 'fornecedor':
         profile = await Kitchen.create({
-          userId: user.id,
-          name: profileData.kitchenName,
-          location: profileData.location,
-          specialty: profileData.specialty
+          usuario_id: user.id,
+          nome: profileData.nome_estabelecimento,
+          localizacao: profileData.localizacao,
+          especialidade: profileData.especialidade
         });
         break;
-      case 'delivery':
+      case 'entregador':
         profile = await DeliveryPerson.create({
-          userId: user.id,
-          vehicle: profileData.vehicle
+          usuario_id: user.id,
+          veiculo: profileData.veiculo
         });
         break;
+      default:
+        // Admin e atendimento não precisam de perfil adicional
+        break;
+    }
+
+    // Verificar se JWT_SECRET está definido
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET não está definido');
+      throw new Error('Configuração de JWT ausente');
     }
 
     // Gerar token JWT
     const token = jwt.sign(
-      { id: user.id, type: user.type },
+      { id: user.id, tipo: user.tipo },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -62,9 +72,9 @@ exports.register = async (req, res) => {
       message: 'Usuário criado com sucesso',
       user: {
         id: user.id,
-        name: user.name,
+        nome: user.nome,
         email: user.email,
-        type: user.type
+        tipo: user.tipo
       },
       profile,
       token
@@ -78,34 +88,63 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, senha } = req.body;
 
     // Buscar usuário
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ 
+      where: { email },
+      include: [
+        { model: Customer, as: 'cliente' },
+        { model: Kitchen, as: 'fornecedor' },
+        { model: DeliveryPerson, as: 'entregador' }
+      ]
+    });
+
     if (!user) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
     // Verificar senha
-    const isValidPassword = await user.comparePassword(password);
+    const isValidPassword = await user.comparePassword(senha);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
+    // Verificar se JWT_SECRET está definido
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET não está definido');
+      throw new Error('Configuração de JWT ausente');
+    }
+
     // Gerar token JWT
     const token = jwt.sign(
-      { id: user.id, type: user.type },
+      { id: user.id, tipo: user.tipo },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
+    // Determinar o perfil baseado no tipo
+    let profile = null;
+    switch (user.tipo) {
+      case 'cliente':
+        profile = user.cliente;
+        break;
+      case 'fornecedor':
+        profile = user.fornecedor;
+        break;
+      case 'entregador':
+        profile = user.entregador;
+        break;
+    }
+
     res.json({
       user: {
         id: user.id,
-        name: user.name,
+        nome: user.nome,
         email: user.email,
-        type: user.type
+        tipo: user.tipo
       },
+      profile,
       token
     });
 
