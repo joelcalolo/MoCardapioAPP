@@ -3,18 +3,9 @@ const router = express.Router();
 const { Op } = require('sequelize');
 const { authMiddleware, checkUserType } = require('../middleware/auth.middleware');
 const { Order, OrderItem, Dish, Kitchen, Customer, DeliveryPerson, User } = require('../models');
-const { body } = require('express-validator');
-
-// Validações para criação de pedido
-const orderValidations = [
-  body('fornecedor_id').isUUID().withMessage('ID do fornecedor inválido'),
-  body('itens').isArray().withMessage('Itens devem ser um array'),
-  body('itens.*.prato_id').isUUID().withMessage('ID do prato inválido'),
-  body('itens.*.quantidade').isInt({ min: 1 }).withMessage('Quantidade deve ser maior que 0')
-];
 
 // Criar pedido (Cliente)
-router.post('/', authMiddleware, checkUserType('cliente'), orderValidations, async (req, res) => {
+router.post('/', authMiddleware, checkUserType('cliente'), async (req, res) => {
   try {
     const { fornecedor_id, itens, local_entrega, descricao_entrega } = req.body;
     const cliente = req.profile;
@@ -26,7 +17,7 @@ router.post('/', authMiddleware, checkUserType('cliente'), orderValidations, asy
     }
 
     // Calcular total do pedido
-    let total = 0;
+    let total = 1000;
     const itensPedido = [];
 
     for (const item of itens) {
@@ -135,16 +126,47 @@ router.post('/:orderId/accept-delivery', async (req, res) => {
   }
 });
 
-// Rotas protegidas
-router.use(authMiddleware);
+// Rota protegida para entregador atualizar status do pedido
+router.patch('/:orderId/status', authMiddleware, checkUserType('entregador'), async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+    const entregador = req.profile;
 
-// Listar pedidos (filtrado por tipo de usuário)
-router.get('/', async (req, res) => {
+    const order = await Order.findOne({
+      where: {
+        id: orderId,
+        entregador_id: entregador.id
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido não encontrado ou não pertence a este entregador' });
+    }
+
+    const statusPermitidos = ['entregando', 'entregue'];
+    if (!statusPermitidos.includes(status)) {
+      return res.status(400).json({ error: 'Status inválido para entregador' });
+    }
+
+    await order.update({ status });
+
+    res.json({
+      message: 'Status atualizado com sucesso',
+      order
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar status:', error);
+    res.status(500).json({ error: 'Erro ao atualizar status' });
+  }
+});
+
+// Listar pedidos
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const { user, profile } = req;
     let where = {};
 
-    // Filtrar pedidos baseado no tipo de usuário
     switch (user.tipo) {
       case 'cliente':
         where.cliente_id = profile.id;
@@ -153,7 +175,6 @@ router.get('/', async (req, res) => {
         where.fornecedor_id = profile.id;
         break;
       case 'entregador':
-        // Mostrar pedidos prontos sem entregador OU pedidos que já são deste entregador
         where = {
           [Op.or]: [
             {
@@ -170,7 +191,6 @@ router.get('/', async (req, res) => {
         };
         break;
       case 'admin':
-        // Admin pode ver todos os pedidos
         break;
       default:
         return res.status(403).json({ error: 'Tipo de usuário não autorizado' });
@@ -215,6 +235,7 @@ router.get('/', async (req, res) => {
       order: [['criado_em', 'DESC']]
     });
 
+    // Formatar os dados antes de enviar
     const formattedPedidos = pedidos.map(pedido => {
       const plainPedido = pedido.get({ plain: true });
       return {
@@ -238,134 +259,6 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Erro ao listar pedidos:', error);
     res.status(500).json({ error: 'Erro ao listar pedidos' });
-  }
-});
-
-// Listar pedidos por entregador
-router.get('/entregador', authMiddleware, checkUserType('entregador'), async (req, res) => {
-  try {
-    const pedidos = await Order.findAll({
-      where: { entregador_id: req.profile.id },
-      include: [
-        {
-          model: OrderItem,
-          as: 'itens',
-          include: [{ model: Dish, as: 'prato' }]
-        },
-        { model: Kitchen, as: 'fornecedor' },
-        { model: Customer, as: 'cliente' }
-      ],
-      order: [['criado_em', 'DESC']]
-    });
-    res.json(pedidos);
-  } catch (error) {
-    console.error('Erro ao listar pedidos do entregador:', error);
-    res.status(500).json({ error: 'Erro ao listar pedidos do entregador' });
-  }
-});
-
-// Detalhes do pedido
-router.get('/:id', authMiddleware, async (req, res) => {
-  try {
-    const { user, profile } = req;
-    const pedidoId = req.params.id;
-
-    const pedido = await Order.findOne({
-      where: { id: pedidoId },
-      include: [
-        {
-          model: OrderItem,
-          as: 'itens',
-          include: [{ model: Dish, as: 'prato' }]
-        },
-        { model: Kitchen, as: 'fornecedor' },
-        { model: Customer, as: 'cliente' },
-        { model: DeliveryPerson, as: 'entregador' }
-      ]
-    });
-
-    if (!pedido) {
-      return res.status(404).json({ error: 'Pedido não encontrado' });
-    }
-
-    // Verificar permissão
-    const temPermissao = user.tipo === 'admin' ||
-      (user.tipo === 'cliente' && pedido.cliente_id === profile.id) ||
-      (user.tipo === 'fornecedor' && pedido.fornecedor_id === profile.id) ||
-      (user.tipo === 'entregador' && pedido.entregador_id === profile.id);
-
-    if (!temPermissao) {
-      return res.status(403).json({ error: 'Sem permissão para ver este pedido' });
-    }
-
-    res.json(pedido);
-  } catch (error) {
-    console.error('Erro ao buscar pedido:', error);
-    res.status(500).json({ error: 'Erro ao buscar pedido' });
-  }
-});
-
-// Atualizar status do pedido
-router.patch('/:id/status', authMiddleware, async (req, res) => {
-  try {
-    const { user, profile } = req;
-    const { status } = req.body;
-    const pedidoId = req.params.id;
-
-    const pedido = await Order.findByPk(pedidoId);
-    if (!pedido) {
-      return res.status(404).json({ error: 'Pedido não encontrado' });
-    }
-
-    // Verificar permissões e regras de negócio para atualização de status
-    switch (user.tipo) {
-      case 'fornecedor':
-        if (pedido.fornecedor_id !== profile.id) {
-          return res.status(403).json({ error: 'Sem permissão para atualizar este pedido' });
-        }
-        if (!['aceito', 'preparando', 'pronto', 'cancelado'].includes(status)) {
-          return res.status(400).json({ error: 'Status inválido para fornecedor' });
-        }
-        break;
-
-      case 'entregador':
-        if (pedido.entregador_id !== profile.id) {
-          return res.status(403).json({ error: 'Sem permissão para atualizar este pedido' });
-        }
-        if (!['entregando', 'entregue'].includes(status)) {
-          return res.status(400).json({ error: 'Status inválido para entregador' });
-        }
-        break;
-
-      case 'admin':
-        // Admin pode atualizar para qualquer status
-        break;
-
-      default:
-        return res.status(403).json({ error: 'Sem permissão para atualizar status' });
-    }
-
-    await pedido.update({ status });
-
-    // Buscar pedido atualizado com todos os relacionamentos
-    const pedidoAtualizado = await Order.findOne({
-      where: { id: pedidoId },
-      include: [
-        {
-          model: OrderItem,
-          as: 'itens',
-          include: [{ model: Dish, as: 'prato' }]
-        },
-        { model: Kitchen, as: 'fornecedor' },
-        { model: Customer, as: 'cliente' },
-        { model: DeliveryPerson, as: 'entregador' }
-      ]
-    });
-
-    res.json(pedidoAtualizado);
-  } catch (error) {
-    console.error('Erro ao atualizar status do pedido:', error);
-    res.status(500).json({ error: 'Erro ao atualizar status do pedido' });
   }
 });
 

@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { Op } = require('sequelize');
 const { authMiddleware, checkUserType } = require('../middleware/auth.middleware');
-const { Order, OrderItem, Dish, Kitchen, Customer, DeliveryPerson, User } = require('../models');
+const { Order, OrderItem, Dish, Kitchen, Customer, DeliveryPerson } = require('../models');
 const { body } = require('express-validator');
+const { Op } = require('sequelize');
 
 // Validações para criação de pedido
 const orderValidations = [
@@ -13,83 +13,75 @@ const orderValidations = [
   body('itens.*.quantidade').isInt({ min: 1 }).withMessage('Quantidade deve ser maior que 0')
 ];
 
-// Criar pedido (Cliente)
+// Criar pedido (requer autenticação)
 router.post('/', authMiddleware, checkUserType('cliente'), orderValidations, async (req, res) => {
   try {
-    const { fornecedor_id, itens, local_entrega, descricao_entrega } = req.body;
+    const { fornecedor_id, itens } = req.body;
     const cliente = req.profile;
 
-    // Validar fornecedor
-    const fornecedor = await Kitchen.findByPk(fornecedor_id);
+    // Verificar se o fornecedor existe e está disponível
+    const fornecedor = await Kitchen.findOne({
+      where: { id: fornecedor_id, disponivel: true }
+    });
+
     if (!fornecedor) {
-      return res.status(404).json({ error: 'Fornecedor não encontrado' });
+      return res.status(404).json({ error: 'Fornecedor não encontrado ou indisponível' });
     }
 
-    // Calcular total do pedido
+    // Calcular total do pedido e verificar disponibilidade dos pratos
     let total = 0;
-    const itensPedido = [];
+    const pratosVerificados = await Promise.all(
+      itens.map(async (item) => {
+        const prato = await Dish.findOne({
+          where: { id: item.prato_id, disponivel: true }
+        });
 
-    for (const item of itens) {
-      const prato = await Dish.findByPk(item.prato_id);
-      if (!prato) {
-        return res.status(404).json({ error: `Prato ${item.prato_id} não encontrado` });
-      }
-      if (!prato.disponivel) {
-        return res.status(400).json({ error: `Prato ${prato.nome} não está disponível` });
-      }
-      const subtotal = prato.preco * item.quantidade;
-      total += subtotal;
-      itensPedido.push({
-        prato_id: prato.id,
-        quantidade: item.quantidade,
-        subtotal
-      });
-    }
+        if (!prato) {
+          throw new Error(`Prato ${item.prato_id} não encontrado ou indisponível`);
+        }
+
+        const subtotal = prato.preco * item.quantidade;
+        total += subtotal;
+
+        return {
+          prato,
+          quantidade: item.quantidade,
+          subtotal
+        };
+      })
+    );
 
     // Criar pedido
     const pedido = await Order.create({
       cliente_id: cliente.id,
       fornecedor_id,
-      total,
       status: 'pendente',
-      local_entrega,
-      descricao_entrega
+      total
     });
 
     // Criar itens do pedido
-    await OrderItem.bulkCreate(
-      itensPedido.map(item => ({
-        ...item,
-        pedido_id: pedido.id
-      }))
+    await Promise.all(
+      pratosVerificados.map(({ prato, quantidade, subtotal }) =>
+        OrderItem.create({
+          pedido_id: pedido.id,
+          prato_id: prato.id,
+          quantidade,
+          subtotal
+        })
+      )
     );
 
     // Buscar pedido completo com relacionamentos
-    const pedidoCompleto = await Order.findByPk(pedido.id, {
+    const pedidoCompleto = await Order.findOne({
+      where: { id: pedido.id },
       include: [
         {
           model: OrderItem,
           as: 'itens',
           include: [{ model: Dish, as: 'prato' }]
         },
-        {
-          model: Kitchen,
-          as: 'fornecedor',
-          include: [{
-            model: User,
-            as: 'usuario',
-            attributes: ['nome', 'email']
-          }]
-        },
-        {
-          model: Customer,
-          as: 'cliente',
-          include: [{
-            model: User,
-            as: 'usuario',
-            attributes: ['nome', 'email']
-          }]
-        }
+        { model: Kitchen, as: 'fornecedor' },
+        { model: Customer, as: 'cliente' }
       ]
     });
 
@@ -184,57 +176,14 @@ router.get('/', async (req, res) => {
           as: 'itens',
           include: [{ model: Dish, as: 'prato' }]
         },
-        {
-          model: Kitchen,
-          as: 'fornecedor',
-          include: [{
-            model: User,
-            as: 'usuario',
-            attributes: ['nome', 'email']
-          }]
-        },
-        {
-          model: Customer,
-          as: 'cliente',
-          include: [{
-            model: User,
-            as: 'usuario',
-            attributes: ['nome', 'email']
-          }]
-        },
-        {
-          model: DeliveryPerson,
-          as: 'entregador',
-          include: [{
-            model: User,
-            as: 'usuario',
-            attributes: ['nome', 'email']
-          }]
-        }
+        { model: Kitchen, as: 'fornecedor' },
+        { model: Customer, as: 'cliente' },
+        { model: DeliveryPerson, as: 'entregador' }
       ],
       order: [['criado_em', 'DESC']]
     });
 
-    const formattedPedidos = pedidos.map(pedido => {
-      const plainPedido = pedido.get({ plain: true });
-      return {
-        ...plainPedido,
-        fornecedor: plainPedido.fornecedor ? {
-          ...plainPedido.fornecedor,
-          nome: plainPedido.fornecedor.usuario.nome
-        } : null,
-        cliente: plainPedido.cliente ? {
-          ...plainPedido.cliente,
-          nome: plainPedido.cliente.usuario.nome
-        } : null,
-        entregador: plainPedido.entregador ? {
-          ...plainPedido.entregador,
-          nome: plainPedido.entregador.usuario.nome
-        } : null
-      };
-    });
-
-    res.json(formattedPedidos);
+    res.json(pedidos);
   } catch (error) {
     console.error('Erro ao listar pedidos:', error);
     res.status(500).json({ error: 'Erro ao listar pedidos' });
@@ -265,7 +214,7 @@ router.get('/entregador', authMiddleware, checkUserType('entregador'), async (re
 });
 
 // Detalhes do pedido
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const { user, profile } = req;
     const pedidoId = req.params.id;
@@ -306,7 +255,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // Atualizar status do pedido
-router.patch('/:id/status', authMiddleware, async (req, res) => {
+router.patch('/:id/status', async (req, res) => {
   try {
     const { user, profile } = req;
     const { status } = req.body;
@@ -366,6 +315,43 @@ router.patch('/:id/status', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Erro ao atualizar status do pedido:', error);
     res.status(500).json({ error: 'Erro ao atualizar status do pedido' });
+  }
+});
+
+// Rota protegida para entregador atualizar status do pedido
+router.patch('/:orderId/status', authMiddleware, checkUserType('entregador'), async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+    const entregador = req.profile;
+
+    const order = await Order.findOne({
+      where: {
+        id: orderId,
+        entregador_id: entregador.id // Verifica se o pedido pertence a este entregador
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Pedido não encontrado ou não pertence a este entregador' });
+    }
+
+    // Validar transições de status permitidas
+    const statusPermitidos = ['entregando', 'entregue'];
+    if (!statusPermitidos.includes(status)) {
+      return res.status(400).json({ error: 'Status inválido para entregador' });
+    }
+
+    await order.update({ status });
+
+    res.json({
+      message: 'Status atualizado com sucesso',
+      order
+    });
+
+  } catch (error) {
+    console.error('Erro ao atualizar status:', error);
+    res.status(500).json({ error: 'Erro ao atualizar status' });
   }
 });
 

@@ -11,6 +11,7 @@ router.get('/', async (req, res) => {
       include: [{
         model: Kitchen,
         as: 'fornecedor',
+        where: { disponivel: true },
         attributes: ['nome', 'localizacao', 'especialidade']
       }]
     });
@@ -21,12 +22,12 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+// Listar pratos por fornecedor (rota pública)
+router.get('/fornecedor/:fornecedorId', async (req, res) => {
   try {
-    const prato = await Dish.findOne({
+    const pratos = await Dish.findAll({
       where: { 
-        id: req.params.id,
-        disponivel: true
+        fornecedor_id: req.params.fornecedorId
       },
       include: [{
         model: Kitchen,
@@ -34,20 +35,74 @@ router.get('/:id', async (req, res) => {
         attributes: ['nome', 'localizacao', 'especialidade']
       }]
     });
+    res.json(pratos);
+  } catch (error) {
+    console.error('Erro ao listar pratos do fornecedor:', error);
+    res.status(500).json({ error: 'Erro ao listar pratos do fornecedor' });
+  }
+});
+
+// Rotas protegidas
+router.use(authMiddleware);
+
+// Listar pratos do fornecedor logado
+router.get('/meus-pratos', checkUserType('fornecedor'), async (req, res) => {
+  try {
+    const pratos = await Dish.findAll({
+      where: { 
+        fornecedor_id: req.profile.id
+      },
+      include: [{
+        model: Kitchen,
+        as: 'fornecedor',
+        attributes: ['nome', 'localizacao', 'especialidade']
+      }]
+    });
+    res.json(pratos);
+  } catch (error) {
+    console.error('Erro ao listar pratos:', error);
+    res.status(500).json({ error: 'Erro ao listar pratos' });
+  }
+});
+
+// Listar pratos indisponíveis
+router.get('/indisponiveis', checkUserType('fornecedor'), async (req, res) => {
+  try {
+    const pratos = await Dish.findAll({
+      where: { 
+        fornecedor_id: req.profile.id,
+        disponivel: false
+      }
+    });
+    res.json(pratos);
+  } catch (error) {
+    console.error('Erro ao listar pratos indisponíveis:', error);
+    res.status(500).json({ error: 'Erro ao listar pratos indisponíveis' });
+  }
+});
+
+// Atualizar disponibilidade do prato
+router.patch('/:id/disponibilidade', checkUserType('fornecedor'), async (req, res) => {
+  try {
+    const { disponivel } = req.body;
+    const prato = await Dish.findOne({
+      where: { 
+        id: req.params.id,
+        fornecedor_id: req.profile.id
+      }
+    });
 
     if (!prato) {
       return res.status(404).json({ error: 'Prato não encontrado' });
     }
 
+    await prato.update({ disponivel });
     res.json(prato);
   } catch (error) {
-    console.error('Erro ao buscar prato:', error);
-    res.status(500).json({ error: 'Erro ao buscar prato' });
+    console.error('Erro ao atualizar disponibilidade:', error);
+    res.status(500).json({ error: 'Erro ao atualizar disponibilidade' });
   }
 });
-
-// Rotas protegidas (apenas fornecedores podem modificar cardápios)
-router.use(authMiddleware);
 
 // Criar novo prato (apenas fornecedores)
 router.post('/', checkUserType('fornecedor'), async (req, res) => {

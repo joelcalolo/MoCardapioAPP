@@ -83,4 +83,26 @@ router.put('/profile', async (req, res) => {
   }
 });
 
+// Atualizar disponibilidade do usuário
+router.patch('/disponibilidade', async (req, res) => {
+  try {
+    const { disponivel } = req.body;
+    const { user, profile } = req;
+
+    if (user.tipo === 'fornecedor' || user.tipo === 'entregador') {
+      await profile.update({ disponivel });
+      
+      res.json({
+        message: 'Disponibilidade atualizada com sucesso',
+        disponivel
+      });
+    } else {
+      res.status(403).json({ error: 'Operação não permitida para este tipo de usuário' });
+    }
+  } catch (error) {
+    console.error('Erro ao atualizar disponibilidade:', error);
+    res.status(500).json({ error: 'Erro ao atualizar disponibilidade' });
+  }
+});
+
 module.exports = router;

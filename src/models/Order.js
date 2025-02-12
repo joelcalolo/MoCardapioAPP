@@ -47,6 +47,14 @@ module.exports = (sequelize) => {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false
     },
+    local_entrega: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    descricao_entrega: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     criado_em: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
