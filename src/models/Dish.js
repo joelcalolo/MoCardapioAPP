@@ -34,6 +34,10 @@ module.exports = (sequelize) => {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false
     },
+    imagem: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     disponivel: {
       type: DataTypes.BOOLEAN,
       defaultValue: true

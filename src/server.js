@@ -17,10 +17,24 @@ app.use(cors({
 
 // Configurar morgan para logs HTTP
 app.use(morgan('dev'));
+app.use('/api/uploads', express.raw({ type: 'multipart/form-data', limit: '50mb' }));
 
 // Middlewares
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+//  ===== MIDDLEWARE DE DEBUG =====
+app.use((req, res, next) => {
+  console.log('\n===== DEBUG REQUEST =====');
+  console.log('URL:', req.originalUrl);
+  console.log('Method:', req.method);
+  console.log('Headers:', req.headers);
+  console.log('Body:', req.body); // Mostra corpo para métodos POST/PUT
+  console.log('=========================\n');
+  next();
+});
+
+
 
 // Log de requisições detalhado
 app.use((req, res, next) => {

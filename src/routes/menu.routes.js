@@ -1,7 +1,45 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const router = express.Router();
 const { authMiddleware, checkUserType } = require('../middleware/auth.middleware');
 const { Dish, Kitchen } = require('../models');
+const bodyParser = require("body-parser");
+
+// Criar a pasta "uploads" se não existir
+const uploadDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+
+// Configuração do Multer
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir); // Salvar na pasta 'uploads'
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + path.extname(file.originalname)); // Nome único para cada arquivo
+    }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 } // 🔹 Limite de 50MB
+});
+
+// Rota de upload
+router.post('/uploads', upload.single('imagem'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+  }
+  res.json({ 
+    url: `/uploads/${req.file.filename}`,
+    message: 'Upload realizado com sucesso' 
+  });
+});
+
 
 // Rotas públicas
 router.get('/', async (req, res) => {
@@ -105,17 +143,22 @@ router.patch('/:id/disponibilidade', checkUserType('fornecedor'), async (req, re
 });
 
 // Criar novo prato (apenas fornecedores)
-router.post('/', checkUserType('fornecedor'), async (req, res) => {
+router.post('/', checkUserType('fornecedor'), upload.single('imagem'), async (req, res) => {
   try {
     const { nome, descricao, preco } = req.body;
     const fornecedor = req.profile;
 
+    // Verificar se a imagem foi enviada
+    const imagem = req.file ? `/uploads/${req.file.filename}` : null;
+
+    // Criar o prato no banco de dados com a URL da imagem
     const prato = await Dish.create({
-      fornecedor_id: fornecedor.id,
+      fornecedor_id: fornecedor.id, // Mantendo a lógica original
       nome,
       descricao,
       preco,
-      disponivel: true
+      imagem, // Salva a URL da imagem no banco
+      disponivel: true,
     });
 
     res.status(201).json(prato);
